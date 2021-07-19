@@ -4,6 +4,7 @@ from rest_framework.permissions import BasePermission
 
 from . import models
 
+
 class IfColumnInUserBoard(BasePermission):
     def has_permission(self, request: Request, view: APIView) -> bool:
         try:
@@ -12,6 +13,7 @@ class IfColumnInUserBoard(BasePermission):
             return False
 
         return column.board.user.pk == request.user.pk
+
 
 class IfCardInUserBoard(BasePermission):
     def has_permission(self, request: Request, view: APIView) -> bool:
@@ -22,6 +24,7 @@ class IfCardInUserBoard(BasePermission):
 
         return card.column.board.user.pk == request.user.pk
 
+
 class IfColumnInDataInUserBoard(BasePermission):
     def has_permission(self, request: Request, view: APIView) -> bool:
         column_id = request.data.get('column')
@@ -30,7 +33,7 @@ class IfColumnInDataInUserBoard(BasePermission):
                 column = models.Column.objects.get(pk=column_id)
             except models.Column.DoesNotExist:
                 return False
-            
+
             return column.board.user.pk == request.user.pk
 
         return True
