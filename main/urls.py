@@ -1,11 +1,11 @@
-from django.urls import path
+from rest_framework.routers import DefaultRouter
+
 from . import views
 
-urlpatterns = [
-    path('board/', views.BoardListView.as_view()),
-    path('board/<int:pk>/', views.BoardDetailView.as_view()),
-    path('column/', views.ColumnListView.as_view()),
-    path('column/<int:pk>/', views.ColumnDetailView.as_view()),
-    path('card/', views.CardListView.as_view()),
-    path('card/<int:pk>/', views.CardDetailView.as_view()),
-]
+router = DefaultRouter()
+router.register('user', views.UserView, basename='user')
+router.register('board', views.BoardView, basename='board')
+router.register('column', views.ColumnView, basename='column')
+router.register('card', views.CardView, basename='card')
+
+urlpatterns = router.urls

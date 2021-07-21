@@ -1,146 +1,76 @@
-from rest_framework.exceptions import PermissionDenied
-from rest_framework.generics import (
-    ListCreateAPIView,
-    RetrieveUpdateDestroyAPIView,
-)
-from rest_framework.response import Response
+from rest_framework.viewsets import ModelViewSet, ViewSet
+from rest_framework.decorators import action
 from rest_framework.request import Request
-from rest_framework.views import APIView
+from rest_framework.response import Response
+from django.db.utils import IntegrityError
 
-from . import models, serializers, permissions
-
-
-def required_query(*query_names: str):
-    def wrapper(func):
-        def wrapped(self, request: Request, *args, **kwargs):
-            no_found_query = []
-            for query_name in query_names:
-                if request.query_params.get(query_name) is None:
-                    no_found_query.append(query_name)
-            if len(no_found_query):
-                query_names_string = ', '.join(
-                    f"'{query}'" for query in no_found_query
-                )
-                return Response(data={
-                    'detail': f'{query_names_string} query param is required'
-                }, status=400)
-
-            return func(self, request, *args, **kwargs)
-        return wrapped
-    return wrapper
+from . import models, serializers
 
 
-class BoardListView(ListCreateAPIView):
-    serializer_class = serializers.BoardSerializer
+class UserView(ViewSet):
+    serializer_class = serializers.UserSerializer
 
-    def get_queryset(self):
-        return models.Board.objects.filter(user=self.request.user)
+    @action(
+        detail=False,
+        methods=('POST',),
+        authentication_classes=tuple(),
+        permission_classes=tuple(),
+    )
+    def registration(self, request: Request) -> Response:
+        user = self.serializer_class(data=request.data)
+        user.is_valid(raise_exception=True)
+        try:
+            user = models.UserModel.objects.create_user(**user.data)
+        except IntegrityError as error:
+            return Response(
+                data={'message': error.args[0]},
+                status=400,
+            )
+        user.save()
+        return Response()
 
-    def perform_create(self, serializer: serializers.BoardSerializer):
-        serializer.save(user=self.request.user)
 
-
-class BoardDetailView(RetrieveUpdateDestroyAPIView):
+class BoardView(ModelViewSet):
     serializer_class = serializers.BoardSerializer
 
     def get_queryset(self):
         return models.Board.objects.filter(user=self.request.user.pk)
 
-
-def getBoardIfInUserBoard(request: Request, board_id: int) -> models.Board:
-    '''
-    Raises
-    ------
-    PermissionDenied
-        если доска не принадлежит текущему пользователю
-    '''
-    try:
-        board = models.Board.objects.get(pk=board_id)
-    except models.Board.DoesNotExist:
-        raise PermissionDenied()
-
-    if board.user.pk != request.user.pk:
-        raise PermissionDenied()
-
-    return board
+    def perform_create(self, serializer: serializers.BoardSerializer):
+        serializer.save(user=self.request.user)
 
 
-class ColumnListView(APIView):
+class ColumnView(ModelViewSet):
     serializer_class = serializers.ColumnSerializer
 
-    @required_query('board')
-    def get(self, request: Request) -> Response:
-        return Response(serializers.ColumnSerializer(
-            models.Column.objects.filter(board=getBoardIfInUserBoard(
-                request,
-                request.query_params.get('board'),
-            )),
-            many=True,
-        ).data)
-
-    def post(self, request: Request) -> Response:
-        column = serializers.ColumnSerializer(data=request.data)
-        column.is_valid(raise_exception=True)
-        column.save(
-            board=getBoardIfInUserBoard(request, request.data['board']),
+    def get_queryset(self):
+        columns = models.Column.objects.filter(
+            board__in=models.Board.objects.filter(
+                user=self.request.user.pk
+            )
         )
-        return Response(column.data)
+
+        board = self.request.query_params.get('board')
+        if board is None:
+            return columns
+
+        return columns.filter(board=board)
 
 
-class ColumnDetailView(RetrieveUpdateDestroyAPIView):
-    permission_classes = (
-        *RetrieveUpdateDestroyAPIView.permission_classes,
-        permissions.IfColumnInUserBoard,
-    )
-    serializer_class = serializers.ColumnSerializer
-    queryset = models.Column.objects.all()
-
-
-def getColumnIfInUserBoard(request: Request, column_id: int) -> models.Column:
-    '''
-    Raises
-    ------
-    PermissionDenied
-        если колонка не принадлежит текущему пользователю
-    '''
-    try:
-        column = models.Column.objects.get(pk=column_id)
-    except models.Column.DoesNotExist:
-        raise PermissionDenied()
-
-    if column.board.user.pk != request.user.pk:
-        raise PermissionDenied()
-
-    return column
-
-
-class CardListView(APIView):
+class CardView(ModelViewSet):
     serializer_class = serializers.CardSerializer
 
-    @required_query('column')
-    def get(self, request: Request) -> Response:
-        return Response(serializers.CardSerializer(
-            models.Card.objects.filter(column=getColumnIfInUserBoard(
-                request,
-                request.query_params.get('column'),
-            )),
-            many=True,
-        ).data)
-
-    def post(self, request: Request) -> Response:
-        card = serializers.CardSerializer(data=request.data)
-        card.is_valid(raise_exception=True)
-        card.save(
-            column=getColumnIfInUserBoard(request, request.data['column']),
+    def get_queryset(self):
+        cards = models.Card.objects.filter(
+            column__in=models.Column.objects.filter(
+                board__in=models.Board.objects.filter(
+                    user=self.request.user.pk
+                )
+            )
         )
-        return Response(card.data)
 
+        column = self.request.query_params.get('board')
+        if column is None:
+            return cards
 
-class CardDetailView(RetrieveUpdateDestroyAPIView):
-    permission_classes = (
-        *RetrieveUpdateDestroyAPIView.permission_classes,
-        permissions.IfCardInUserBoard,
-        permissions.IfColumnInDataInUserBoard,
-    )
-    serializer_class = serializers.CardSerializer
-    queryset = models.Card.objects.all()
+        return cards.filter(column=column)
