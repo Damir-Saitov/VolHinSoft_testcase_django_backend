@@ -69,7 +69,7 @@ class CardView(ModelViewSet):
             )
         )
 
-        column = self.request.query_params.get('board')
+        column = self.request.query_params.get('column')
         if column is None:
             return cards
 
