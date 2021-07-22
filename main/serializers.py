@@ -20,9 +20,13 @@ class ColumnSerializer(serializers.ModelSerializer):
         model = models.Column
         fields = '__all__'
 
+    # Если не указать явно, то:
+    # IntegrityError at /api/column/
+    # NOT NULL constraint failed: main_column.board_id
+    # Может быть баг из-за название таблицы "Column"
     board = serializers.IntegerField(source='board_id')
 
-    def validate_board(self, value):
+    def validate_board(self, value: int):
         error = serializers.ValidationError(detail={
             'board': 'Invalid value',
         })
@@ -43,19 +47,12 @@ class CardSerializer(serializers.ModelSerializer):
         model = models.Card
         fields = '__all__'
 
-    column = serializers.IntegerField(source='column_id')
+    # column = serializers.IntegerField(source='column_id')
 
-    def validate_column(self, value):
-        error = serializers.ValidationError(detail={
-            'column': 'Invalid value',
-        })
-
-        try:
-            column = models.Column.objects.get(pk=value)
-        except models.Column.DoesNotExist:
-            raise error
-
-        if (column.board.user.pk != self.context['request'].user.pk):
-            raise error
+    def validate_column(self, value: models.Column):
+        if (value.board.user.pk != self.context['request'].user.pk):
+            raise serializers.ValidationError(detail={
+                'column': 'Invalid value',
+            })
 
         return value
